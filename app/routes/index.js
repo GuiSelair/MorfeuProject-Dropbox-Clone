@@ -8,11 +8,15 @@ router.get('/', function(req, res, next) {
 });
 
 router.post("/upload", (req, res) => {
+  //  IncomingForm: Chamada o formulario
   const form = new formidable.IncomingForm({
     uploadDir: "./upload",
     keepExtensions: true
   })
-  res.json(req.body)
+
+  form.parse(req, (error, fields, files) => {
+    res.json({files})
+  })
 })
 
 module.exports = router;
