@@ -1,7 +1,7 @@
 # Dropbox Clone
 > Aplicação desenvolvida durante o Curso Completo de JavaScript realizado na Udemy.
 
-![](.github/header.jpg)
+![](.github/header.png)
 
 
 ## Introdução
