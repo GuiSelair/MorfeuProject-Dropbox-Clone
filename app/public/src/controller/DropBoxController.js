@@ -8,19 +8,42 @@ class DropBoxController{
     constructor(){
         // Busca o botão de enviar pelo ID 
         this.sendButtonEl = document.querySelector("#btn-send-file");
+        // BUSCA BOTÃO DE CRIAÇÃO DE NOVA PASTA
+        this.btnNewFolder = document.querySelector("#btn-new-folder");
+        // BUSCA BOTÃO DE RENOMEAR
+        this.btnRename = document.querySelector("#btn-rename");
+        // BUSCA BOTÃO DE EXCLUIR ITEM
+        this.btnDelete = document.querySelector("#btn-delete");
+
+        // ORGANIZAÇAO DE PASTAS
+        // hcode É A NOSSA PASTA RAIZ NO FIREBASE
+        this.currentFolder = ["hcode"]
+
+        // BUSCA O BREADCRUMB
+        this.breadCrumbEl = document.querySelector("#browse-location")
         // BUSCA O BOTÃO DE INPUT PELO ID
         this.inputFilesEl = document.querySelector("#files");
         // BUSCA O MODAL QUE EXIBE O CARREGAMENTO DO ARQUIVO PELO ID
         this.modalFilesProcessEl = document.querySelector("#react-snackbar-root");
         // BUSCA BARRA DE PORCENTAGEM DE UPLOAD
         this.progressBarEl = this.modalFilesProcessEl.querySelector(".mc-progress-bar-fg");
+        this.listFilesEl = document.querySelector("#list-of-files-and-directories")
 
         this.connectFirebase()
         //  INICIA TODOS OS EVENTOS PRIMARIOS
         this.initEvents()
+
+        // ABRE A PASTA RAIZ
+        this.openFolder()
+
+        // CRIAÇÃO DE EVENTO PARA AVISAR AOS OUTROS COMPONENTES QUANDO HOUVER MUDANÇA NOS LIs
+        this.onSelectionChange = new Event("selectionChange");
+
+
         
     }
 
+    // CONEXÃO AO FIREBASE
     connectFirebase(){
         // Your web app's Firebase configuration
         var firebaseConfig = {
@@ -35,10 +58,70 @@ class DropBoxController{
         };
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
-        firebase.analytics();
+        
     }
 
     initEvents(){
+
+        // QUANDO O BOTÃO DE NOVA PASTA FOR CLICADO
+        this.btnNewFolder.addEventListener("click", () => {
+            const nameFolder = prompt("Nome da nova pasta: ")
+            if (nameFolder){
+                this.getFirebaseRef().push().set({
+                    name: nameFolder,
+                    type: "folder",
+                    path: this.currentFolder.join("/")
+                })
+            }
+        })
+
+        // QUANDO O BOTÃO EXCLUIR FOR CLICADO
+        this.btnDelete.addEventListener("click", (event) => {
+            this.removeTask().then(responses => {
+                console.log(responses)
+                responses.forEach(response => {
+                    if (response.fields.key){
+                        this.getFirebaseRef().child(response.fields.key).remove()
+                    }
+                })
+            }).catch(e => {
+                console.log(e)
+            })
+        })
+
+        // QUANDO O BOTÃO RENOMEAR FOR CLICADO
+        this.btnRename.addEventListener("click", (event) => {
+            const li = this.getSelection()[0]
+            const file = JSON.parse(li.dataset.file)
+            let name = prompt("Renomear o arquivo: ", file.name)
+
+            if (name) {
+                file.name = name
+                this.getFirebaseRef().child(li.dataset.key).set(file)
+            }
+        })
+
+        // EVENTO QUE ADMINISTRA QUANDO MOSTRAR OS BOTÕES RENOMEAR E EXCLUIR
+        this.listFilesEl.addEventListener("selectionChange", (event) => {
+            switch (this.getSelection().length) {
+                case 0:
+                    this.btnRename.style.display = "none";
+                    this.btnDelete.style.display = "none";
+                    break;
+
+                case 1:
+                    this.btnRename.style.display = "block";
+                    this.btnDelete.style.display = "block";
+                    break;
+                
+                default:
+                    this.btnRename.style.display = "none";
+                    this.btnDelete.style.display = "block";
+                    break;
+            }
+        })
+
+        // QUANDO O BOTÃO ENVIAR ARQUIVO FOR CLICADO
         this.sendButtonEl.addEventListener("click", (event) => {
             /*
              *  QUANDO O BOTÃO É CLICADO, É ABERTO A TELA DE INPUT.
@@ -49,18 +132,95 @@ class DropBoxController{
 
         //  QUANDO ALGUM ARQUIVO FOR SELECIONADO ELE IRÁ ACIONAR O MODAL
         this.inputFilesEl.addEventListener("change", event => {
-            this.uploadTask(event.target.files);
+
+            this.sendButtonEl.disabled = true;
+            this.uploadTask(event.target.files).then(responses => {
+
+                responses.forEach(resp => {
+                    // INSERT OBJETO NO BANCO DE DADOS FIREBASE. 
+                    // UTILIZANDO O REALTIME-DATABASE (NO-SQL), CADA INSERÇÃO CORRESPONDE A UM OBJETO
+                    this.getFirebaseRef().push().set(resp.files["input-file"]);
+                });
+
+                this.uploadComplete()
+            });
             this.modalShow();
             this.inputFilesEl.value = "";
         });
     }
 
+    // MÉTODO RESPONSAVEL POR EXCLUIR ITENS, TANTO UM ITEM QUANTO VÁRIOS 
+    // POR ISSO SERÁ UTILIZADO O PROMISE.ALL
+    removeTask(){
+        const promises = []
+        this.getSelection().forEach(li => {
+            const file = JSON.parse(li.dataset.file)
+            const formData = new FormData();
+            formData.append("path", file.path);
+            formData.append("key", li.dataset.key);
+            promises.push(this.ajax("DELETE", "/file", formData))
+
+        })
+        return Promise.all(promises)
+    }
+
+    // VERIFICA QUANDO LIs ESTÃO SELECIONADOS
+    getSelection(){
+        return this.listFilesEl.querySelectorAll(".selected")
+    }
+
+    uploadComplete(){
+        this.modalShow(false)
+        this.inputFilesEl.value = "";
+        this.sendButtonEl.disabled = false;
+    }
+
+    // MÉTODO DE CRIAÇÃO E REFERENCIA (CASO JÁ ESTEJA CRIADO) DA "TABELA" FILES NO BANCO DE DADOS 
+    getFirebaseRef(path){
+        if (!path){
+            path = this.currentFolder.join("/")
+        }
+        return firebase.database().ref(path)
+    }
+
+    // MÉTODO DE CRIAÇÃO DE UMA CHAMADA AJAX
+    ajax(method="GET", url, formData = new FormData(), onprogress = function(){}, onloadstart = function(){}){
+        /*
+        * ABRINDO REQUISIÇÕES ASSICRONAS VIA AJAX
+        * SE COMUNICANDO COM O SERVIDOR
+        */
+
+        return new Promise((resolve, reject) => {
+            let ajax = new XMLHttpRequest()
+            ajax.open(method, url)
+            ajax.onload = event => {
+                try {
+                    resolve(JSON.parse(ajax.responseText))
+                }
+                catch (error) {
+                    reject(error)
+                }
+            };
+            ajax.upload.onprogress = onprogress()
+            ajax.onerror = error => {
+                reject(error)
+            };
+    
+            onloadstart()
+    
+            ajax.send(formData)
+        })
+    }
+
+    // MÉTODO DE EXEBIÇÃO DO MODAL
     modalShow(display = true){
         this.modalFilesProcessEl.style.display = (display) ? "block" : "none";
     }
 
+    // MÉTODO QUE REALIZA O UPLOAD REALIZANDO UM REQUISIÇÃO AJAX PARA O SERVIDOR
     uploadTask(files){
         let promises = [];
+
         /*
          *  COMO O event.target.files É CONSIDERADO UMA COLEÇÃO TRANSFORMAMOS EM UMA LISTA
          *  USANDO O [...files]
@@ -69,36 +229,13 @@ class DropBoxController{
          *  DEIXAREMOS O Promise.all GERENCIAR SE TUDO DEU CERTO OU SE ALGUM ARQUIVO FALHOU.
          */
         [...files].forEach(file => {
-            promises.push(new Promise((resolve, reject) => {
-                /*
-                 * ABRINDO REQUISIÇÕES ASSICRONAS VIA AJAX
-                 * SE COMUNICANDO COM O SERVIDOR
-                 */
-                let ajax = new XMLHttpRequest()
-                ajax.open("POST", "/upload")
-                ajax.onload = event => {
-                    this.modalShow(false);
-                    try {
-                        resolve(JSON.parse(ajax.responseText))
-                    }
-                    catch (error) {
-                        reject(error)
-                    }
-                };
-                ajax.upload.onprogress = (event) => {
-                    this.uploadProgress(event, file)
-                };
-                ajax.onerror = error => {
-                    this.modalShow(false);
-                    reject(error)
-                };
+            // PRECISANDO USAR O FormData() PARA ENVIAR OS ARQUIVOS VIA AJAX
+            let formData = new FormData()
+            formData.append("input-file", file)
 
+            promises.push(this.ajax("POST", "/upload", formData, () => {
+                this.uploadProgress(event, file)}, () => {
                 this.timeStart = Date.now();
-
-                // PRECISANDO USAR O FormData() PARA ENVIAR OS ARQUIVOS VIA AJAX
-                let formData = new FormData()
-                formData.append("input-file", file)
-                ajax.send(formData)
             }))
         });
 
@@ -106,6 +243,8 @@ class DropBoxController{
         return Promise.all(promises)
     }
 
+    // REALIZA O CALCULO DE QUANTO TEMPO IRÁ DEMORAR PARA FAZER O UPLOAD
+    // ATUALIZA A BARRA DE PROCESSO E O TEMPO
     uploadProgress(event, file){
         // CALCULANDO O PROGRESSO DA BARRA
         const loader = event.loaded;
@@ -123,6 +262,8 @@ class DropBoxController{
         this.modalFilesProcessEl.querySelector(".timeleft").innerHTML = this.formatTimeOfHuman(timeLeft);
     }
 
+    // MÉTODO RESPONSAVEL POR FORMATAR O TIMESTAMP EM HORA, MINUTOS E SEGUNGOS
+    // UTILIZADO PARA MOSTRAR ESTIMATIVA DO UPLOAD
     formatTimeOfHuman(timeLeft){
         const seconds = parseInt((timeLeft / 1000) % 60);
         const minutes = parseInt((timeLeft * (1000 * 60)) % 60);
@@ -142,15 +283,24 @@ class DropBoxController{
 
     }
 
-    getFileView(file){
-        return `
-            <li>
-                ${this.getFileIconView(file)}
-                <div class="name text-center">${file.name}</div>
-            </li>
+    // CRIA UMA NOVA LI PARA CADA ELEMENTO CONTIDO NO BANCO DE DADOS
+    // TAMBÉM ADICIONA O ID DO ELEMENTO AO DATASET.KEY
+    getFileView(file, key){
+
+        const li = document.createElement("li")
+        li.dataset.key = key
+        li.dataset.file = JSON.stringify(file)
+        li.innerHTML = `
+            ${this.getFileIconView(file)}
+            <div class="name text-center">${file.name}</div>
         `
+        
+        this.initEventsLi(li)
+
+        return li
     }
 
+    // MÉTODO RESPONSAVEL POR SELECIONAR A THUMBNAIL CORRETA PARA CADA TIPO DE ARQUIVO
     getFileIconView(file){
         switch (file.type){
             case "folder":
@@ -304,4 +454,138 @@ class DropBoxController{
                 `
         }   
     }
+
+    // MÉTODO OBSERVADOR QUE A CADA ATUALIZAÇÃO NO BANCO DE DADOS, ATUALIZA OS ITENS NA TELA
+    readFiles(){
+
+        this.lastFolder = this.currentFolder.join("/")
+
+        // QUANDO NOVOS OBJ FOREM INSERIDOS AO BD, O FIREBASE DISPARA UM SNAPSHOT DA ALTERAÇÃO
+        this.getFirebaseRef().on("value", snapshot => {
+            this.listFilesEl.innerHTML = ""
+            snapshot.forEach(snapItem => {
+                const idItem = snapItem.key
+                const data = snapItem.val()
+                if (data.type){
+                    this.listFilesEl.appendChild(this.getFileView(data, idItem))
+                }
+            })
+        })
+    }
+
+    // OBSERVE SE O ITEM FOI CLICADO E SELECIONA O MESMO
+    // FUNCIONALIDADE DE DETECÇÃO DE APERTO NO CTRL E SHIFT DO TECLADO
+    initEventsLi(li){
+        li.addEventListener("click", (e) => {
+
+            if (e.shiftKey){
+                const firstLi = this.listFilesEl.querySelector(".selected")
+                let indexStart;
+                let indexEnd;
+                let lis = li.parentElement.childNodes;
+                if (firstLi){
+
+                    lis.forEach((el, index) => {
+                        if (firstLi === el)  indexStart = index
+                        if (li === el) indexEnd = index
+                    })
+
+                    let index = [indexStart, indexEnd].sort()
+
+                    lis.forEach((el, i) => {
+                        if (i >= index[0] && i <= index[1]){
+                            el.classList.add("selected")
+                        }
+                    })
+
+                    // DECLARAÇÃO DE UM NOVO EVENTO PARA CAPTURAR MUDANÇAS NA LISTA DE LIs
+                    this.listFilesEl.dispatchEvent(this.onSelectionChange)
+
+                    return true;
+                }
+            }
+
+            if (!e.ctrlKey){
+                this.listFilesEl.querySelectorAll("li.selected").forEach(el => {
+                    el.classList.remove("selected")
+                })
+            }
+            
+            li.classList.toggle("selected")
+
+            // DECLARAÇÃO DE UM NOVO EVENTO PARA CAPTURAR MUDANÇAS NA LISTA DE LIs
+            this.listFilesEl.dispatchEvent(this.onSelectionChange)
+
+        })
+
+        li.addEventListener("dblclick", (e) => {
+            const file = JSON.parse(li.dataset.file)
+            switch (file.type) {
+                case "folder":
+                    this.currentFolder.push(file.name)
+                    this.openFolder()
+                    break;
+            
+                default:
+                    window.open(`/file?path=${file.path}`)
+                    break;
+            }
+        })
+    }
+
+    // ABRE PASTAS E RENDERIZA OQUE HÁ NELA.
+    openFolder() {
+        if (this.lastFolder){
+            this.getFirebaseRef(this.lastFolder).off("value");
+        }
+        this.renderBreadCrumb()
+        // LÊ E ATUALIZA ITENS NA TELA
+        this.readFiles()
+
+    }
+
+    renderBreadCrumb() {
+
+        const nav = document.createElement("nav")
+        let path = []
+
+        for (let i = 0; i < this.currentFolder.length; i++){
+            const folderName = this.currentFolder[i]
+            const span = document.createElement("span")
+            path.push(folderName)
+
+            if ((i + 1) === this.currentFolder.length){
+                span.innerHTML = folderName
+
+            }
+            else {
+                span.className = "breadcrumb-segment__wrapper"
+                span.innerHTML = `
+                    <span class="ue-effect-container uee-BreadCrumbSegment-link-0">
+                        <a href="#" data-path=${path.join("/")}  class="breadcrumb-segment">${folderName}</a>
+                    </span>
+                    <svg width="24" height="24" viewBox="0 0 24 24" class="mc-icon-template-stateless" style="top: 4px; position: relative;">
+                        <title>arrow-right</title>
+                        <path d="M10.414 7.05l4.95 4.95-4.95 4.95L9 15.534 12.536 12 9 8.464z" fill="#637282" fill-rule="evenodd"></path>
+                    </svg>`
+
+            }
+            nav.appendChild(span)
+
+        }
+
+        this.breadCrumbEl.innerHTML = nav.innerHTML;
+
+        // CRIANDO PARA CADA LINK DENTRO DO BREADCRUMBS UM EVENTO PARA VOLTAR A PASTA ANTERIORES
+        // CRIANDO UMA ESPECIE DE NAVEGAÇÃO
+        this.breadCrumbEl.querySelectorAll("a").forEach(a => {
+            a.addEventListener("click", (e) => {
+                e.preventDefault()
+                this.currentFolder = a.dataset.path.split("/")
+                this.openFolder()
+            })
+        })
+    }
+
+    
 }
