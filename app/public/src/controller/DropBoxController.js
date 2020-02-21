@@ -134,12 +134,17 @@ class DropBoxController{
         this.inputFilesEl.addEventListener("change", event => {
 
             this.sendButtonEl.disabled = true;
-            this.uploadTask(event.target.files).then(responses => {
-
+            this.uploadTask(event.target.files).then((responses) => {
+                
                 responses.forEach(resp => {
                     // INSERT OBJETO NO BANCO DE DADOS FIREBASE. 
                     // UTILIZANDO O REALTIME-DATABASE (NO-SQL), CADA INSERÇÃO CORRESPONDE A UM OBJETO
-                    this.getFirebaseRef().push().set(resp.files["input-file"]);
+                    this.getFirebaseRef().push().set({
+                        name: resp.name,
+                        type: resp.contentType,
+                        path: resp.downloadURL,
+                        size: resp.size 
+                    });
                 });
 
                 this.uploadComplete()
@@ -229,13 +234,31 @@ class DropBoxController{
          *  DEIXAREMOS O Promise.all GERENCIAR SE TUDO DEU CERTO OU SE ALGUM ARQUIVO FALHOU.
          */
         [...files].forEach(file => {
-            // PRECISANDO USAR O FormData() PARA ENVIAR OS ARQUIVOS VIA AJAX
-            let formData = new FormData()
-            formData.append("input-file", file)
+            
+            promises.push(new Promise((resolve, reject)=>{
+                const fileRef = firebase.storage().ref(this.currentFolder.join("/")).child(file.name)
+                const task = fileRef.put(file)
+                task.on("state_changed", (snapshot) => {
+                    this.uploadProgress({
+                        loaded: snapshot.bytesTransferred,
+                        total: snapshot.totalBytes
+                    }, file)
+                }, (error) => {
+                    console.error(error)
+                    reject(error)
+                }, () => {
+                    const url = task.snapshot.ref.getDownloadURL().then(url =>{
+                        return url
+                    })
 
-            promises.push(this.ajax("POST", "/upload", formData, () => {
-                this.uploadProgress(event, file)}, () => {
-                this.timeStart = Date.now();
+                    fileRef.getMetadata().then(metadata => {
+                        console.log(metadata)
+                        metadata.downloadURL = url.i
+                        resolve(metadata)
+                    }).catch(error => {
+                        reject(error)
+                    })
+                })      
             }))
         });
 
