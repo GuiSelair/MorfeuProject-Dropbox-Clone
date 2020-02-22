@@ -160,13 +160,75 @@ class DropBoxController{
         const promises = []
         this.getSelection().forEach(li => {
             const file = JSON.parse(li.dataset.file)
-            const formData = new FormData();
-            formData.append("path", file.path);
-            formData.append("key", li.dataset.key);
-            promises.push(this.ajax("DELETE", "/file", formData))
+            const key = li.dataset.key
+            
+            promises.push(new Promise((resolve, reject) => {
+                
+                if (file.type === "folder"){
+                    this.removeFolderTask(this.currentFolder.join("/"), file.name).then(() => {
+                        resolve({
+                            fields: {
+                                key
+                            }
+                        })
+                    })
+                }else if (file.type){
+                    this.removeFile(this.currentFolder.join("/"), file.name).then(() => {
+                        resolve({
+                            fields: {
+                                key
+                            }
+                        })
+                    }) 
+                } 
+                
+            }))
 
         })
         return Promise.all(promises)
+    }
+
+    // REMOVE ARQUIVO
+    removeFile(ref,name){
+        const fileRef = firebase.storage().ref(ref).child(name);
+        return fileRef.delete()
+    }
+
+    // REMOVE PASTA
+    removeFolderTask(ref, name){
+        return new Promise((resolve, reject) => {
+            const folderRef = this.getFirebaseRef(ref+"/"+ name)
+            folderRef.on("value", snapshot => {
+                folderRef.off("value")
+                snapshot.forEach(item => {
+                    const data = item.val();
+                    data.key = item.key;
+
+                    if (data.type === "folder"){
+                        this.removeFolderTask(ref+"/"+name, data.name).then(() => {
+                            resolve({
+                                fields: {
+                                    key: data.key
+                                }
+                            })
+                        }).catch(e => {
+                            reject(e)
+                        })
+                    }else if (data.type){
+                        this.removeFile(ref+"/"+name, data.name).then(() => {
+                            resolve({
+                                fields: {
+                                    key: data.key
+                                }
+                            })
+                        }).catch(e => {
+                            reject(e)
+                        })
+                    }
+                })
+                folderRef.remove()
+            })
+        })
     }
 
     // VERIFICA QUANDO LIs ESTÃO SELECIONADOS
@@ -550,7 +612,7 @@ class DropBoxController{
                     break;
             
                 default:
-                    window.open(`/file?path=${file.path}`)
+                    window.open(file.path)
                     break;
             }
         })
