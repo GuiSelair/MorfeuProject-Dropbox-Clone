@@ -6,13 +6,14 @@
 
 ## Introdução
 
-Aplicação desenvolvida durante o [Curso Completo de JavaScript](https://www.udemy.com/course/javascript-curso-completo/) ministrado pela [HCode Treinamentos](https://www.hcode.com.br/#/) realizado na [Udemy](https://www.udemy.com/). A Aplicação consiste reproduzir o [Dropbox](https://www.dropbox.com/pt_BR/) com a ideia de ficar o mais semelhante ao software oficial.
+Aplicação desenvolvida durante o [Curso Completo de JavaScript](https://www.udemy.com/course/javascript-curso-completo/) ministrado pela [HCode Treinamentos](https://www.hcode.com.br/#/) realizado na [Udemy](https://www.udemy.com/). A aplicação consiste em reproduzir o aplicativo do [Dropbox](https://www.dropbox.com/pt_BR/) com a ideia de ficar semelhante ao software oficial. Contando com as funcionalidades de uploads de arquivos, criação, renomeação e exclusão de arquivos e diretórios e navegação entre diferentes pastas .
 
-Durante a execução deste projeto vale destacar ensinamento como:
- - Express
- - Firebase
+Durante a execução deste projeto vale destacar a manipulação das seguintes tecnologias:
+ - MiniFramework Express
+ - Firebase Realtime Database
+ - Firebase Storage
  - Upload de arquivos
- - NodeJS
+
 
 ## Pré-requisitos
 
@@ -64,7 +65,7 @@ yarn start
 
 ## Status do projeto
 
- - **EM ANDAMENTO**
+ - **EM FASE DE REFATORAÇÃO**
 
 ## Autor
 
