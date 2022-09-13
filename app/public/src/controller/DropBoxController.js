@@ -4,7 +4,7 @@
  */
 
 class DropBoxController{
-
+    
     constructor(){
         // Busca o botão de enviar pelo ID 
         this.sendButtonEl = document.querySelector("#btn-send-file");
@@ -29,7 +29,6 @@ class DropBoxController{
         this.progressBarEl = this.modalFilesProcessEl.querySelector(".mc-progress-bar-fg");
         this.listFilesEl = document.querySelector("#list-of-files-and-directories")
 
-        this.connectFirebase()
         //  INICIA TODOS OS EVENTOS PRIMARIOS
         this.initEvents()
 
@@ -39,46 +38,60 @@ class DropBoxController{
         // CRIAÇÃO DE EVENTO PARA AVISAR AOS OUTROS COMPONENTES QUANDO HOUVER MUDANÇA NOS LIs
         this.onSelectionChange = new Event("selectionChange");
 
-
-        
+        this.prefixLocalStorage = "morfeu-dropbox@";
+        if (!localStorage.getItem(`${this.prefixLocalStorage}default-folder`)){
+            localStorage.setItem(`${this.prefixLocalStorage}default-folder`, JSON.stringify({
+                data: []
+            }))
+        }
     }
 
-    // CONEXÃO AO FIREBASE
-    connectFirebase(){
-        // Your web app's Firebase configuration
-        var firebaseConfig = {
-            apiKey: "AIzaSyDWbWAfLDOsl0WZvg2rMmyVO2K3WldcuzA",
-            authDomain: "dropbox-clone-9bfa6.firebaseapp.com",
-            databaseURL: "https://dropbox-clone-9bfa6.firebaseio.com",
-            projectId: "dropbox-clone-9bfa6",
-            storageBucket: "dropbox-clone-9bfa6.appspot.com",
-            messagingSenderId: "743299528935",
-            appId: "1:743299528935:web:9393726f62f6f76e178a42",
-            measurementId: "G-Q3136G0VFF"
-        };
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        
+    createFolderInLocalStorage(folderName){
+        localStorage.setItem(`${this.prefixLocalStorage}${folderName}`, JSON.stringify({
+            data: []
+        }));
     }
 
+    createFileWithoutFolderInLocalStorage(file){
+        const defaultFolder = localStorage.getItem(`${"morfeu-dropbox@"}default-folder`);
+
+        if (defaultFolder){
+            const folderData = JSON.parse(defaultFolder);
+            folderData.data.push({
+                ...file
+            })
+            localStorage.setItem(`${"morfeu-dropbox@"}default-folder`, JSON.stringify(folderData));
+        }
+    }
+
+    createFileWithFolderInLocalStorage(folderName, file){
+        const folderFound = localStorage.getItem(`${this.prefixLocalStorage}${folderName}`);
+
+        if (folderFound){
+            const folderData = JSON.parse(defaultFolder);
+            const updatedFolderData = folderData.data.push({
+                name: file.name,
+                type: file.contentType,
+                path: file.downloadURL,
+                size: file.size
+            })
+            localStorage.setItem(`${this.prefixLocalStorage}${folderName}`, JSON.stringify(updatedFolderData));
+        }
+    }
+    
     initEvents(){
 
         // QUANDO O BOTÃO DE NOVA PASTA FOR CLICADO
         this.btnNewFolder.addEventListener("click", () => {
             const nameFolder = prompt("Nome da nova pasta: ")
             if (nameFolder){
-                this.getFirebaseRef().push().set({
-                    name: nameFolder,
-                    type: "folder",
-                    path: this.currentFolder.join("/")
-                })
+                this.createFolderInLocalStorage(nameFolder);
             }
         })
 
         // QUANDO O BOTÃO EXCLUIR FOR CLICADO
         this.btnDelete.addEventListener("click", (event) => {
             this.removeTask().then(responses => {
-                console.log(responses)
                 responses.forEach(response => {
                     if (response.fields.key){
                         this.getFirebaseRef().child(response.fields.key).remove()
@@ -134,21 +147,23 @@ class DropBoxController{
         this.inputFilesEl.addEventListener("change", event => {
 
             this.sendButtonEl.disabled = true;
-            this.uploadTask(event.target.files).then((responses) => {
+            console.log(event.target.files)
+            this.createFileWithoutFolderInLocalStorage(event.target.files);
+            // this.uploadTask(event.target.files).then((responses) => {
                 
-                responses.forEach(resp => {
-                    // INSERT OBJETO NO BANCO DE DADOS FIREBASE. 
-                    // UTILIZANDO O REALTIME-DATABASE (NO-SQL), CADA INSERÇÃO CORRESPONDE A UM OBJETO
-                    this.getFirebaseRef().push().set({
-                        name: resp.name,
-                        type: resp.contentType,
-                        path: resp.downloadURL,
-                        size: resp.size 
-                    });
-                });
+            //     responses.forEach(resp => {
+            //         // INSERT OBJETO NO BANCO DE DADOS FIREBASE. 
+            //         // UTILIZANDO O REALTIME-DATABASE (NO-SQL), CADA INSERÇÃO CORRESPONDE A UM OBJETO
+            //         this.getFirebaseRef().push().set({
+            //             name: resp.name,
+            //             type: resp.contentType,
+            //             path: resp.downloadURL,
+            //             size: resp.size 
+            //         });
+            //     });
 
-                this.uploadComplete()
-            });
+            //     this.uploadComplete()
+            // });
             this.modalShow();
             this.inputFilesEl.value = "";
         });
