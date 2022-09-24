@@ -30,6 +30,13 @@ class DropBoxController{
         this.progressBarEl = this.modalFilesProcessEl.querySelector(".mc-progress-bar-fg");
         this.listFilesEl = document.querySelector("#list-of-files-and-directories")
 
+
+        if (!localStorage.getItem(`${this.prefixLocalStorage}default-folder`)){
+            localStorage.setItem(`${this.prefixLocalStorage}default-folder`, JSON.stringify({
+                data: []
+            }))
+        }
+
         //  INICIA TODOS OS EVENTOS PRIMARIOS
         this.initEvents()
 
@@ -38,12 +45,6 @@ class DropBoxController{
 
         // CRIAÇÃO DE EVENTO PARA AVISAR AOS OUTROS COMPONENTES QUANDO HOUVER MUDANÇA NOS LIs
         this.onSelectionChange = new Event("selectionChange");
-
-        if (!localStorage.getItem(`${this.prefixLocalStorage}default-folder`)){
-            localStorage.setItem(`${this.prefixLocalStorage}default-folder`, JSON.stringify({
-                data: []
-            }))
-        }
     }
 
     parseFolderName(folderName){
@@ -63,9 +64,7 @@ class DropBoxController{
     }
 
     createFileInLocalStorage(files, folderName = null){
-        console.log(files, folderName)
         const folderFound = localStorage.getItem(this.parseFolderName(folderName ? folderName : "default-folder"));
-        console.log(folderFound)
 
         if (folderFound){
             const folderData = JSON.parse(folderFound);
@@ -73,10 +72,14 @@ class DropBoxController{
                 const fileAlreadyExists = folderData.data.find(fileFound => fileFound.name === file.name);
                 
                 if (!fileAlreadyExists){
+                    var binaryData = [];
+                    binaryData.push(file);
+                    
                     folderData.data.push({
                         name: file?.name,
                         type: file?.type,
-                        size: file?.size
+                        size: file?.size,
+                        url: window.URL.createObjectURL(new Blob(binaryData, {type: "image/jpg"}))
                     })
                     localStorage.setItem(this.parseFolderName(folderName ? folderName : "default-folder"), JSON.stringify(folderData));
 
@@ -100,7 +103,6 @@ class DropBoxController{
     }
 
     getFilesInLocalStorage(folderName = null) {
-        console.log(folderName);
         const folderFound = localStorage.getItem(this.parseFolderName(folderName ? folderName : "default-folder"));
         return JSON.parse(folderFound).data;
     }
@@ -644,7 +646,7 @@ class DropBoxController{
                     break;
             
                 default:
-                    window.open(file.path)
+                    window.open(file.url)
                     break;
             }
         })
@@ -653,10 +655,10 @@ class DropBoxController{
     // ABRE PASTAS E RENDERIZA OQUE HÁ NELA.
     openFolder() {
         this.renderBreadCrumb()
-        this.readFiles()
-        if (this.currentFolder.length == 1 && this.currentFolder[0] === "default-folder") return
         this.resetScreen()
         this.readFiles()
+        
+        if (this.currentFolder.length == 1 && this.currentFolder[0] === "default-folder") return
 
     }
 
