@@ -378,6 +378,7 @@ class DropBoxController{
                     </svg>
                     `
             case "audio/mp3":
+            case "audio/mpeg":
                 return `
                     <svg width="160" height="160" viewBox="0 0 160 160" class="mc-icon-template-content tile__preview tile__preview--icon">
                         <title>content-audio-large</title>
