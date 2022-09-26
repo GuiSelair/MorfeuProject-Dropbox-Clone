@@ -6,7 +6,7 @@ class DropBoxController{
         this.btnRename = document.querySelector("#btn-rename");
         this.btnDelete = document.querySelector("#btn-delete");
 
-        this.currentFolder = ["default-folder"]
+        this.currentFolder = ["Home"]
         this.prefixLocalStorage = "morfeu-dropbox@";
 
         this.breadCrumbEl = document.querySelector("#browse-location")
@@ -16,8 +16,8 @@ class DropBoxController{
         this.listFilesEl = document.querySelector("#list-of-files-and-directories")
 
 
-        if (!localStorage.getItem(`${this.prefixLocalStorage}default-folder`)){
-            localStorage.setItem(`${this.prefixLocalStorage}default-folder`, JSON.stringify({
+        if (!localStorage.getItem(`${this.prefixLocalStorage}Home`)){
+            localStorage.setItem(`${this.prefixLocalStorage}Home`, JSON.stringify({
                 data: []
             }))
         }
@@ -39,7 +39,7 @@ class DropBoxController{
     }
 
     createFileInLocalStorage(files, folderName = null){
-        const folderData = this.getFolderDataInLocalStorage(folderName ? folderName : "default-folder")
+        const folderData = this.getFolderDataInLocalStorage(folderName ? folderName : "Home")
 
         if (folderData){
             [...files].forEach(file => {
@@ -52,7 +52,7 @@ class DropBoxController{
                         size: file?.size,
                         key: crypto.randomUUID()
                     })
-                    this.simulateUploadComplete(folderData, folderName ? folderName : "default-folder")
+                    this.simulateUploadComplete(folderData, folderName ? folderName : "Home", file)
                 }
             })
         }
@@ -77,19 +77,18 @@ class DropBoxController{
     }
 
     removeFolderInLocalStorage(folderName){
-        console.log(folderName);
         localStorage.removeItem(this.parseFolderName(folderName));
         this.refreshScreen();
     }
 
     getFolderDataInLocalStorage(folderName = null) {
-        const folderFound = localStorage.getItem(this.parseFolderName(folderName ? folderName : "default-folder"));
+        const folderFound = localStorage.getItem(this.parseFolderName(folderName ? folderName : "Home"));
         
         return !!folderFound ? JSON.parse(folderFound)?.data : null;
     }
 
     saveInLocalStorage(folderData, folderName = null) {
-        localStorage.setItem(this.parseFolderName(folderName ? folderName : "default-folder"), JSON.stringify({
+        localStorage.setItem(this.parseFolderName(folderName ? folderName : "Home"), JSON.stringify({
             data: folderData
         }));
         this.refreshScreen()
@@ -103,7 +102,7 @@ class DropBoxController{
         })
         
         Object.entries(localStorage).forEach(([folderName]) => {
-           if (folderName === this.parseFolderName("default-folder")) return
+           if (folderName === this.parseFolderName("Home")) return
 
            const folderNameWithoutPrefix = folderName.split(this.prefixLocalStorage)[1]
 
@@ -214,13 +213,25 @@ class DropBoxController{
         return this.listFilesEl.querySelectorAll(".selected")
     }
 
-    simulateUploadComplete(folderData, folder){
+    simulateUploadComplete(folderData, folder, file){
+        let loaded = 1;
+        this.timeStart = Date.now();
+        const interval = setInterval(() => {
+            this.uploadProgress({
+                loaded: loaded,
+                total: 100
+            }, file)
+            loaded++;
+        }, 30);
+
         setTimeout(() => {
-            this.modalShow(false)
+            clearInterval(interval);
+            this.modalShow(false);
             this.inputFilesEl.value = "";
             this.sendButtonEl.disabled = false;
             this.saveInLocalStorage(folderData, folder)
-        }, 2000)
+            this.timeStart = 0;
+        }, 3000)
     }
 
     modalShow(display = true){
@@ -228,16 +239,13 @@ class DropBoxController{
     }
     
     uploadProgress(event, file){
-        // CALCULANDO O PROGRESSO DA BARRA
         const loader = event.loaded;
         const total = event.total;
         let porcent = parseInt((loader/total) * 100);
         this.progressBarEl.style.width = `${porcent}%`;
 
-        // INSERINDO O NOME DO ARQUIVO NO PROGRESS BAR
         this.modalFilesProcessEl.querySelector(".filename").innerHTML = file.name;
 
-        // CALCULANDO E INSERINDO O TEMPO APROXIMADO PARA O FIM DO UPLOAD
         const timeSpent = Date.now() - this.timeStart;
         const timeLeft = parseInt(((100 - porcent) * timeSpent) / porcent);
 
@@ -492,7 +500,7 @@ class DropBoxController{
                     break;
             
                 default:
-                    window.open(file.url)
+                    window.open("https://www.guilhermeselair.dev")
                     break;
             }
         })
