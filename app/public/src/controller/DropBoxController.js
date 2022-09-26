@@ -47,14 +47,14 @@ class DropBoxController{
     connectFirebase(){
         // Your web app's Firebase configuration
         var firebaseConfig = {
-            apiKey: "AIzaSyDWbWAfLDOsl0WZvg2rMmyVO2K3WldcuzA",
-            authDomain: "dropbox-clone-9bfa6.firebaseapp.com",
-            databaseURL: "https://dropbox-clone-9bfa6.firebaseio.com",
-            projectId: "dropbox-clone-9bfa6",
-            storageBucket: "dropbox-clone-9bfa6.appspot.com",
-            messagingSenderId: "743299528935",
-            appId: "1:743299528935:web:9393726f62f6f76e178a42",
-            measurementId: "G-Q3136G0VFF"
+            apiKey: "",
+            authDomain: "",
+            databaseURL: "",
+            projectId: "",
+            storageBucket: "",
+            messagingSenderId: "",
+            appId: "",
+            measurementId: ""
         };
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
