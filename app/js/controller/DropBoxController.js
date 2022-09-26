@@ -1,32 +1,17 @@
-
-/*
- *  CLASSE CONTROLLER RESPONSAVEL POR CONTROLAR TODAS AS CLASSES 
- */
-
 class DropBoxController{
     
     constructor(){
-        // Busca o botão de enviar pelo ID 
         this.sendButtonEl = document.querySelector("#btn-send-file");
-        // BUSCA BOTÃO DE CRIAÇÃO DE NOVA PASTA
         this.btnNewFolder = document.querySelector("#btn-new-folder");
-        // BUSCA BOTÃO DE RENOMEAR
         this.btnRename = document.querySelector("#btn-rename");
-        // BUSCA BOTÃO DE EXCLUIR ITEM
         this.btnDelete = document.querySelector("#btn-delete");
 
-        // ORGANIZAÇAO DE PASTAS
-        // hcode É A NOSSA PASTA RAIZ NO FIREBASE
         this.currentFolder = ["default-folder"]
         this.prefixLocalStorage = "morfeu-dropbox@";
 
-        // BUSCA O BREADCRUMB
         this.breadCrumbEl = document.querySelector("#browse-location")
-        // BUSCA O BOTÃO DE INPUT PELO ID
         this.inputFilesEl = document.querySelector("#files");
-        // BUSCA O MODAL QUE EXIBE O CARREGAMENTO DO ARQUIVO PELO ID
         this.modalFilesProcessEl = document.querySelector("#react-snackbar-root");
-        // BUSCA BARRA DE PORCENTAGEM DE UPLOAD
         this.progressBarEl = this.modalFilesProcessEl.querySelector(".mc-progress-bar-fg");
         this.listFilesEl = document.querySelector("#list-of-files-and-directories")
 
@@ -37,20 +22,14 @@ class DropBoxController{
             }))
         }
 
-        //  INICIA TODOS OS EVENTOS PRIMARIOS
         this.initEvents()
-
-        // ABRE A PASTA RAIZ
         this.openFolder()
-
-        // CRIAÇÃO DE EVENTO PARA AVISAR AOS OUTROS COMPONENTES QUANDO HOUVER MUDANÇA NOS LIs
         this.onSelectionChange = new Event("selectionChange");
     }
 
     parseFolderName(folderName){
         return `${this.prefixLocalStorage}${folderName}`
     }
-
 
     createFolderInLocalStorage(folderName){
         localStorage.setItem(this.parseFolderName(folderName), JSON.stringify({
@@ -59,56 +38,64 @@ class DropBoxController{
         this.renderFoldersFromLocalStorage()
     }
 
-    removeFolderInLocalStorage(folderName){
-        localStorage.removeItem(this.parseFolderName(folderName))
-    }
-
     createFileInLocalStorage(files, folderName = null){
-        const folderFound = localStorage.getItem(this.parseFolderName(folderName ? folderName : "default-folder"));
+        const folderData = this.getFolderDataInLocalStorage(folderName ? folderName : "default-folder")
 
-        if (folderFound){
-            const folderData = JSON.parse(folderFound);
+        if (folderData){
             [...files].forEach(file => {
-                const fileAlreadyExists = folderData.data.find(fileFound => fileFound.name === file.name);
+                const fileAlreadyExists = folderData.find(fileFound => fileFound.name === file.name);
                 
                 if (!fileAlreadyExists){
-                    var binaryData = [];
-                    binaryData.push(file);
-                    
-                    folderData.data.push({
+                    folderData.push({
                         name: file?.name,
                         type: file?.type,
                         size: file?.size,
-                        url: window.URL.createObjectURL(new Blob(binaryData, {type: "image/jpg"}))
+                        key: crypto.randomUUID()
                     })
-                    localStorage.setItem(this.parseFolderName(folderName ? folderName : "default-folder"), JSON.stringify(folderData));
-
-                    this.uploadComplete(file)
+                    this.simulateUploadComplete(folderData, folderName ? folderName : "default-folder")
                 }
             })
         }
     }
 
-    removeFileInLocalStorage(folderName, fileName){
-        const folderFound = localStorage.getItem(this.parseFolderName(folderName ? folderName : "default-folder"));
+    removeFilesInLocalStorage(folderName){
+        const folderData = this.getFolderDataInLocalStorage(folderName)
 
-        if (folderFound){
-            const folderData = JSON.parse(folderFound);
-            const folderDataWithoutFile = folderData.data.filter(file => file.name !== fileName);
+        this.getSelection().forEach(file => {
+            const key = file.dataset.key
 
-            localStorage.setItem(this.parseFolderName(folderName ? folderName : "default-folder"), JSON.stringify({
-                data: folderDataWithoutFile
-            }));
-        }
+            if (file.dataset.type === "folder") {
+                this.removeFolderInLocalStorage(key);
+                return  
+            } 
+
+            if (folderData.length){
+                const folderDataWithoutFile = folderData.filter(file => file.key !== key);
+                this.saveInLocalStorage(folderDataWithoutFile, folderName)
+            }
+        })
     }
 
-    getFilesInLocalStorage(folderName = null) {
+    removeFolderInLocalStorage(folderName){
+        console.log(folderName);
+        localStorage.removeItem(this.parseFolderName(folderName));
+        this.refreshScreen();
+    }
+
+    getFolderDataInLocalStorage(folderName = null) {
         const folderFound = localStorage.getItem(this.parseFolderName(folderName ? folderName : "default-folder"));
-        return JSON.parse(folderFound).data;
+        
+        return !!folderFound ? JSON.parse(folderFound)?.data : null;
+    }
+
+    saveInLocalStorage(folderData, folderName = null) {
+        localStorage.setItem(this.parseFolderName(folderName ? folderName : "default-folder"), JSON.stringify({
+            data: folderData
+        }));
+        this.refreshScreen()
     }
 
     renderFoldersFromLocalStorage(){
-        
         const foldersThatAreRenderedOnScreen = []
         
         this.listFilesEl.childNodes.forEach(li => {
@@ -116,7 +103,7 @@ class DropBoxController{
         })
         
         Object.entries(localStorage).forEach(([folderName]) => {
-           if (folderName === "morfeu-dropbox@default-folder") return
+           if (folderName === this.parseFolderName("default-folder")) return
 
            const folderNameWithoutPrefix = folderName.split(this.prefixLocalStorage)[1]
 
@@ -130,13 +117,42 @@ class DropBoxController{
 
     }
 
-    resetScreen() {
+    refreshScreen() {
         this.listFilesEl.innerHTML = "";
+        this.insertFilesAndFoldersInScreen()
+    }
+
+    renameFileInLocalStorage(fileKey, newName, folderName = null) {
+        const folderData = this.getFolderDataInLocalStorage(folderName);
+
+        if (folderData) {
+            const updatedFiles = folderData.map(file => {
+                if (file.key === fileKey){
+                    return {
+                        ...file,
+                        name: newName
+                    }
+                }
+                
+                return file;
+            });
+            this.saveInLocalStorage(updatedFiles, folderName)
+        }
+    }
+
+    renameFolderInLocalStorage(oldName, newName) {
+        const folderDataBackup = this.getFolderDataInLocalStorage(oldName);
+        localStorage.removeItem(this.parseFolderName(oldName));
+        localStorage.setItem(this.parseFolderName(newName), JSON.stringify({
+            data: folderDataBackup
+        }))
+    }
+
+    getCurrentFolder() {
+        return this.currentFolder[this.currentFolder.length - 1];
     }
     
     initEvents(){
-
-        // QUANDO O BOTÃO DE NOVA PASTA FOR CLICADO
         this.btnNewFolder.addEventListener("click", () => {
             const nameFolder = prompt("Nome da nova pasta: ")
             if (nameFolder){
@@ -144,32 +160,26 @@ class DropBoxController{
             }
         })
 
-        // QUANDO O BOTÃO EXCLUIR FOR CLICADO
-        this.btnDelete.addEventListener("click", (event) => {
-            this.removeTask().then(responses => {
-                responses.forEach(response => {
-                    if (response.fields.key){
-                        // this.getFirebaseRef().child(response.fields.key).remove()
-                    }
-                })
-            }).catch(e => {
-            })
+        this.btnDelete.addEventListener("click", () => {
+            this.removeFilesInLocalStorage(this.getCurrentFolder())
         })
 
-        // QUANDO O BOTÃO RENOMEAR FOR CLICADO
         this.btnRename.addEventListener("click", (event) => {
-            const li = this.getSelection()[0]
-            const file = JSON.parse(li.dataset.file)
-            let name = prompt("Renomear o arquivo: ", file.name)
+            const li = this.getSelection()[0];
+            const file = JSON.parse(li.dataset.file);
+            let name = prompt("Renomear o arquivo: ", file.name);
 
             if (name) {
-                file.name = name
-                // this.getFirebaseRef().child(li.dataset.key).set(file)
+                if (li.dataset.type === "folder"){
+                    this.renameFolderInLocalStorage(file.name, name);
+                } else {
+                    this.renameFileInLocalStorage(li.dataset.key, name, this.getCurrentFolder());
+                }
+                this.refreshScreen();
             }
         })
 
-        // EVENTO QUE ADMINISTRA QUANDO MOSTRAR OS BOTÕES RENOMEAR E EXCLUIR
-        this.listFilesEl.addEventListener("selectionChange", (event) => {
+        this.listFilesEl.addEventListener("selectionChange", () => {
             switch (this.getSelection().length) {
                 case 0:
                     this.btnRename.style.display = "none";
@@ -188,189 +198,35 @@ class DropBoxController{
             }
         })
 
-        // QUANDO O BOTÃO ENVIAR ARQUIVO FOR CLICADO
         this.sendButtonEl.addEventListener("click", (event) => {
-            /*
-             *  QUANDO O BOTÃO É CLICADO, É ABERTO A TELA DE INPUT.
-             *  ESTE INPUT FICA OCULTO NO ARQUIVO ejs PORÉM COM O .click ELE SERÁ EXECUTADO 
-             */
             this.inputFilesEl.click()
         });
 
-        //  QUANDO ALGUM ARQUIVO FOR SELECIONADO ELE IRÁ ACIONAR O MODAL
         this.inputFilesEl.addEventListener("change", event => {
             this.sendButtonEl.disabled = true;
-            this.createFileInLocalStorage(event.target.files, this.currentFolder[this.currentFolder.length - 1]);
+            this.createFileInLocalStorage(event.target.files, this.getCurrentFolder());
             this.modalShow();
             this.inputFilesEl.value = "";
         });
     }
 
-    removeTask(){
-        const promises = []
-        this.getSelection().forEach(li => {
-            const file = JSON.parse(li.dataset.file)
-            const key = li.dataset.key
-            
-            promises.push(new Promise((resolve, reject) => {
-                
-                if (file.type === "folder"){
-                    this.removeFolderTask(this.currentFolder.join("/"), file.name).then(() => {
-                        resolve({
-                            fields: {
-                                key
-                            }
-                        })
-                    })
-                }else if (file.type){
-                    this.removeFile(this.currentFolder.join("/"), file.name).then(() => {
-                        resolve({
-                            fields: {
-                                key
-                            }
-                        })
-                    }) 
-                } 
-                
-            }))
-
-        })
-        return Promise.all(promises)
-    }
-
-    removeFile(ref,name){
-        // const fileRef = firebase.storage().ref(ref).child(name);
-        return fileRef.delete()
-    }
-
-    removeFolderTask(ref, name){
-        return new Promise((resolve, reject) => {
-            const folderRef = this.getFirebaseRef(ref+"/"+ name)
-            folderRef.on("value", snapshot => {
-                folderRef.off("value")
-                snapshot.forEach(item => {
-                    const data = item.val();
-                    data.key = item.key;
-
-                    if (data.type === "folder"){
-                        this.removeFolderTask(ref+"/"+name, data.name).then(() => {
-                            resolve({
-                                fields: {
-                                    key: data.key
-                                }
-                            })
-                        }).catch(e => {
-                            reject(e)
-                        })
-                    }else if (data.type){
-                        this.removeFile(ref+"/"+name, data.name).then(() => {
-                            resolve({
-                                fields: {
-                                    key: data.key
-                                }
-                            })
-                        }).catch(e => {
-                            reject(e)
-                        })
-                    }
-                })
-                folderRef.remove()
-            })
-        })
-    }
-
-    // VERIFICA QUANDO LIs ESTÃO SELECIONADOS
     getSelection(){
         return this.listFilesEl.querySelectorAll(".selected")
     }
 
-    uploadComplete(file){
+    simulateUploadComplete(folderData, folder){
         setTimeout(() => {
             this.modalShow(false)
             this.inputFilesEl.value = "";
             this.sendButtonEl.disabled = false;
-            this.listFilesEl.appendChild(this.getFileView(file, file.name, "file"))
-        }, 3000)
+            this.saveInLocalStorage(folderData, folder)
+        }, 2000)
     }
 
-    // MÉTODO DE CRIAÇÃO DE UMA CHAMADA AJAX
-    ajax(method="GET", url, formData = new FormData(), onprogress = function(){}, onloadstart = function(){}){
-        /*
-        * ABRINDO REQUISIÇÕES ASSICRONAS VIA AJAX
-        * SE COMUNICANDO COM O SERVIDOR
-        */
-
-        return new Promise((resolve, reject) => {
-            let ajax = new XMLHttpRequest()
-            ajax.open(method, url)
-            ajax.onload = event => {
-                try {
-                    resolve(JSON.parse(ajax.responseText))
-                }
-                catch (error) {
-                    reject(error)
-                }
-            };
-            ajax.upload.onprogress = onprogress()
-            ajax.onerror = error => {
-                reject(error)
-            };
-    
-            onloadstart()
-    
-            ajax.send(formData)
-        })
-    }
-
-    // MÉTODO DE EXEBIÇÃO DO MODAL
     modalShow(display = true){
         this.modalFilesProcessEl.style.display = (display) ? "block" : "none";
     }
-
-    // MÉTODO QUE REALIZA O UPLOAD REALIZANDO UM REQUISIÇÃO AJAX PARA O SERVIDOR
-    uploadTask(files){
-        let promises = [];
-
-        /*
-         *  COMO O event.target.files É CONSIDERADO UMA COLEÇÃO TRANSFORMAMOS EM UMA LISTA
-         *  USANDO O [...files]
-         * 
-         *  CRIAREMOS UMA PROMISE PARA CADA ARQUIVO COLOCANDO-OS EM UMA LISTA. 
-         *  DEIXAREMOS O Promise.all GERENCIAR SE TUDO DEU CERTO OU SE ALGUM ARQUIVO FALHOU.
-         */
-        [...files].forEach(file => {
-            
-            promises.push(new Promise((resolve, reject)=>{
-                // const fileRef = firebase.storage().ref(this.currentFolder.join("/")).child(file.name)
-                const task = fileRef.put(file)
-                task.on("state_changed", (snapshot) => {
-                    this.uploadProgress({
-                        loaded: snapshot.bytesTransferred,
-                        total: snapshot.totalBytes
-                    }, file)
-                }, (error) => {
-                    reject(error)
-                }, () => {
-                    const url = task.snapshot.ref.getDownloadURL().then(url =>{
-                        return url
-                    })
-
-                    fileRef.getMetadata().then(metadata => {
-                        metadata.downloadURL = url.i
-                        resolve(metadata)
-                    }).catch(error => {
-                        reject(error)
-                    })
-                })      
-            }))
-        });
-
-
-        return Promise.all(promises)
-    }
-
-    // REALIZA O CALCULO DE QUANTO TEMPO IRÁ DEMORAR PARA FAZER O UPLOAD
-    // ATUALIZA A BARRA DE PROCESSO E O TEMPO
+    
     uploadProgress(event, file){
         // CALCULANDO O PROGRESSO DA BARRA
         const loader = event.loaded;
@@ -388,8 +244,6 @@ class DropBoxController{
         this.modalFilesProcessEl.querySelector(".timeleft").innerHTML = this.formatTimeOfHuman(timeLeft);
     }
 
-    // MÉTODO RESPONSAVEL POR FORMATAR O TIMESTAMP EM HORA, MINUTOS E SEGUNGOS
-    // UTILIZADO PARA MOSTRAR ESTIMATIVA DO UPLOAD
     formatTimeOfHuman(timeLeft){
         const seconds = parseInt((timeLeft / 1000) % 60);
         const minutes = parseInt((timeLeft * (1000 * 60)) % 60);
@@ -409,10 +263,7 @@ class DropBoxController{
 
     }
 
-    // CRIA UMA NOVA LI PARA CADA ELEMENTO CONTIDO NO BANCO DE DADOS
-    // TAMBÉM ADICIONA O ID DO ELEMENTO AO DATASET.KEY
     getFileView(file, key, type = "file"){
-
         const li = document.createElement("li")
         li.dataset.key = key
         li.dataset.file = JSON.stringify(file)
@@ -423,11 +274,9 @@ class DropBoxController{
         `
         
         this.initEventsLi(li)
-
         return li
     }
 
-    // MÉTODO RESPONSAVEL POR SELECIONAR A THUMBNAIL CORRETA PARA CADA TIPO DE ARQUIVO
     getFileIconView(file){
         switch (file.type){
             case "folder":
@@ -582,21 +431,18 @@ class DropBoxController{
         }   
     }
 
-    readFiles(){
-        const filesInFolderFound = this.getFilesInLocalStorage(this.currentFolder[this.currentFolder.length - 1]);
+    insertFilesAndFoldersInScreen(){
+        const filesInFolderFound = this.getFolderDataInLocalStorage(this.getCurrentFolder());
         filesInFolderFound.forEach(file => {
-            this.listFilesEl.appendChild(this.getFileView(file, file.name))
+            this.listFilesEl.appendChild(this.getFileView(file, file.key))
         })
 
         if (this.currentFolder.length === 1) 
             this.renderFoldersFromLocalStorage()
     }
 
-    // OBSERVE SE O ITEM FOI CLICADO E SELECIONA O MESMO
-    // FUNCIONALIDADE DE DETECÇÃO DE APERTO NO CTRL E SHIFT DO TECLADO
     initEventsLi(li){
         li.addEventListener("click", (e) => {
-
             if (e.shiftKey){
                 const firstLi = this.listFilesEl.querySelector(".selected")
                 let indexStart;
@@ -652,18 +498,18 @@ class DropBoxController{
         })
     }
 
-    // ABRE PASTAS E RENDERIZA OQUE HÁ NELA.
     openFolder() {
         this.renderBreadCrumb()
-        this.resetScreen()
-        this.readFiles()
-        
-        if (this.currentFolder.length == 1 && this.currentFolder[0] === "default-folder") return
+        this.refreshScreen()
 
+        if (this.currentFolder.length > 1) {
+            this.btnNewFolder.style.display = "none";
+        } else {
+            this.btnNewFolder.style.display = "block";
+        }
     }
 
     renderBreadCrumb() {
-
         const nav = document.createElement("nav")
         let path = []
 
@@ -704,6 +550,4 @@ class DropBoxController{
             })
         })
     }
-
-    
 }
