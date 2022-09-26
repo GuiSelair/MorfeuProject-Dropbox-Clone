@@ -1,6 +1,8 @@
 # Dropbox Clone
 > Aplicação desenvolvida durante o Curso Completo de JavaScript realizado na Udemy.
 
+[![Netlify Status](https://api.netlify.com/api/v1/badges/74155501-396b-4200-b444-7b6ec640f5c4/deploy-status)](https://app.netlify.com/sites/morfeu-project-dropbox-clone/deploys)
+
 ![](.github/header.png)
 
 
