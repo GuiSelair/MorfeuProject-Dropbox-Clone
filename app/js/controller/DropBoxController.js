@@ -272,17 +272,18 @@ class DropBoxController{
     }
 
     getFileView(file, key, type = "file"){
-        const li = document.createElement("li")
-        li.dataset.key = key
-        li.dataset.file = JSON.stringify(file)
-        li.dataset.type = type
+        const li = document.createElement("li");
+        li.dataset.key = key;
+        li.dataset.file = JSON.stringify(file);
+        li.dataset.type = type;
+        li.title = file.name;
         li.innerHTML = `
             ${this.getFileIconView(file)}
-            <div class="name text-center">${file.name}</div>
-        `
+            <div class="name text-center cut">${file.name}</div>
+        `;
         
-        this.initEventsLi(li)
-        return li
+        this.initEventsLi(li);
+        return li;
     }
 
     getFileIconView(file){
